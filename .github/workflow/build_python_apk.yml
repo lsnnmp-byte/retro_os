@@ -1,0 +1,89 @@
+name: Python APK Compiler
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository Source
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: System Dependencies Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libssl-dev libsqlite3-dev libffi-dev libbz2-dev
+
+      - name: Install Buildozer and Cython
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv kivy
+
+      # Cache the Buildozer global directory and internal Android SDK to speed up future runs
+      - name: Cache Buildozer and Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
+
+      # Explicitly install command-line tools and components right where Buildozer expects them
+      - name: Install Android SDK cmdline-tools and build-tools
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          set -e
+          export ANDROID_HOME="$HOME/.buildozer/android/platform/android-sdk"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/cmdline-tools" "$ANDROID_HOME/licenses"
+
+          # Download and deploy Google's Linux command-line tools package
+          cd /tmp
+          curl -sSfL "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip" -o cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest"
+          mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
+          mv cmdline-tools/* "$ANDROID_HOME/cmdline-tools/latest/"
+
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+          # Pre-accept all Android license signatures silently
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          
+          # Install platform tools and target API level 33 packages (matches standard Buildozer targets)
+          sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+
+      - name: Generate Buildozer Config Template
+        run: |
+          # Only run init if the spec file doesn't exist (prevents overwriting changes on cached runs)
+          if [ ! -f buildozer.spec ]; then
+            buildozer init
+            sed -i 's/title = My Application/title = Python ADB Companion/g' buildozer.spec
+            sed -i 's/package.name = myapp/package.name = pythonadbcompanion/g' buildozer.spec
+            sed -i 's/requirements = python3,kivy/requirements = python3,kivy,pyjnius/g' buildozer.spec
+            sed -i 's/#android.permissions = INTERNET/android.permissions = INTERNET,USB_PERMISSION/g' buildozer.spec
+          fi
+
+      - name: Run Buildozer Compilation Process
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          buildozer android debug
+
+      - name: Save Compiled APK Output Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-generated-apk
+          path: bin/*.apk
