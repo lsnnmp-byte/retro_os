@@ -1,0 +1,51 @@
+name: Python APK Compiler
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository Source
+        uses: actions/checkout@v4
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: System Dependencies Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libgdbm-dev libssl-dev libsqlite3-dev libffi-dev libbz2-dev
+
+      - name: Install Buildozer and Cython
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython virtualenv kivy
+
+      - name: Generate Buildozer Config Template
+        run: |
+          # Creates the configuration rules instructing the packager what dependencies to include
+          buildozer init
+          
+          # Automatically inject required permissions and libraries into config parameters
+          sed -i 's/title = My Application/title = Python ADB Companion/g' buildozer.spec
+          sed -i 's/package.name = myapp/package.name = pythonadbcompanion/g' buildozer.spec
+          sed -i 's/requirements = python3,kivy/requirements = python3,kivy,pyjnius/g' buildozer.spec
+          sed -i 's/#android.permissions = INTERNET/android.permissions = INTERNET,USB_PERMISSION/g' buildozer.spec
+
+      - name: Run Buildozer Compilation Process
+        run: |
+          # Tells buildozer to compile in debug mode without prompt confirmations
+          buildozer android debug
+
+      - name: Save Compiled APK Output Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-generated-apk
+          path: bin/*.apk
