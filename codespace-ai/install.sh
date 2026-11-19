@@ -16,7 +16,6 @@ python3 -m venv "$APP_DIR/venv"
 cat > "$APP_DIR/server.py" <<'PY'
 import os
 import secrets
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -74,7 +73,7 @@ def write_file(path: str, content: str) -> str:
 
 @mcp.tool()
 def run_terminal(command: str, timeout_seconds: int = 60) -> dict:
-    """Run a terminal command in the workspace. Destructive commands require user confirmation before calling."""
+    """Run a terminal command in the workspace. Ask for confirmation before destructive commands."""
     if not command.strip():
         raise ValueError("Command cannot be empty.")
     timeout = max(1, min(timeout_seconds, 120))
@@ -105,7 +104,6 @@ if __name__ == "__main__":
     app = BearerAuth(mcp.streamable_http_app(), TOKEN)
     print(f"CodeSpace AI MCP listening on 0.0.0.0:{PORT}")
     uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
-
 PY
 
 TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
@@ -115,17 +113,13 @@ CODESPACE_WORKSPACE=$WORKSPACE
 EOF
 chmod 600 "$APP_DIR/.env"
 
-if command -v gh >/dev/null 2>&1; then
-  gh codespace ports visibility 8000:public -c "$CODESPACE_NAME" >/dev/null 2>&1 || true
-fi
-
 echo
 echo "CodeSpace AI is starting."
 echo "Workspace: $WORKSPACE"
 echo "MCP endpoint: https://${CODESPACE_NAME}-8000.app.github.dev/mcp"
 echo "Bearer token (keep private): $TOKEN"
 echo
-echo "Keep this terminal running. If the port is not reachable, set port 8000 to Public in the Codespaces PORTS tab."
+echo "Port 8000 remains private by default. Do not make it public unless you understand the access implications."
 set -a
 source "$APP_DIR/.env"
 set +a
