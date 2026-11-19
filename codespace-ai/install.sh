@@ -11,7 +11,8 @@ APP_DIR="$HOME/.codespace-ai"
 mkdir -p "$APP_DIR"
 python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" -q install --upgrade pip
-"$APP_DIR/venv/bin/pip" -q install "mcp[cli]" uvicorn starlette
+# This server uses the MCP SDK v1 FastMCP API. MCP SDK v2 renamed that API.
+"$APP_DIR/venv/bin/pip" -q install "mcp[cli]<2" uvicorn starlette
 
 cat > "$APP_DIR/server.py" <<'PY'
 import os
